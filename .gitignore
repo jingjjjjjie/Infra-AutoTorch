@@ -2,6 +2,7 @@
 # Keep experiment configurations local; publish only the annotated example.
 /configs/*
 !/configs/train_config.example.yaml
+/AGENTS.md
 
 notes.txt
 **/idfraud/annotation/
