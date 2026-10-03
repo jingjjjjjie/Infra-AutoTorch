@@ -1,0 +1,175 @@
+# AutoTorch training configuration reference and example.
+# Values below form a probability-head + focal-loss example. Change the data
+# paths and save_name before use. This describes the current working tree.
+#
+# Loading: src/train.py always reads configs/train_config.yaml; it does not
+# implement a --config flag. Copy this file there after editing, or change
+# the get_config(name=...) call in src/train.py to select another file.
+# Run from the repository root with torchrun (CUDA/DDP is required):
+#   CUDA_VISIBLE_DEVICES=0 torchrun --nproc_per_node=1 src/train.py
+# Training automatically proceeds to checkpoint evaluation and a leaderboard.
+#
+# "Default" means the code supplies a value if that key is absent. Other
+# values here are examples, not automatic defaults. Numeric ranges describe
+# usable settings; the project does not centrally validate the YAML schema.
+
+experiment:
+  save_dir: ./runs                  # Required: writable output directory.
+  save_name: example_focal_ori      # Required: choose a unique run name.
+  description: Binary focal loss example  # Optional metadata; not used by training.
+
+model:
+  task: classification             # Only registered task; default: classification.
+
+  # All 20 registered backbone_name values:
+  # DINOv3 ViT:
+  #   dinov3_vits16, dinov3_vits16plus, dinov3_vitb16,
+  #   dinov3_vitl16, dinov3_vith16plus, dinov3_vit7b16
+  # DINOv3 ConvNeXt:
+  #   dinov3_convnext_tiny, dinov3_convnext_small,
+  #   dinov3_convnext_base, dinov3_convnext_large
+  # UniRepLKNet:
+  #   unireplknet_n, unireplknet_p, unireplknet_t, unireplknet_s,
+  #   unireplknet_s_in22k, unireplknet_b_in22k
+  # VAN:
+  #   van_b0, van_b1, van_b2, van_b3
+  # Registration does not guarantee local repositories/weights are installed.
+  backbone_name: unireplknet_t      # Required; see external paths below.
+  freeze_backbone: false           # Required: true or false; freezes backbone parameters.
+
+  # Required: v1 | legacy | legacy_v1 | legacy_v2.
+  # Required output_type: logits | probs. This describes the head's output;
+  # changing output_type does not change the activation inside the head.
+  #
+  # Compatible combinations:
+  #   legacy_v1 / legacy_v2 + probs  + bce
+  #   legacy_v1 / legacy_v2 + probs  + binary_focal (from_logits: false)
+  #   v1 / legacy           + logits + bce_with_logits
+  #   v1 / legacy           + logits + binary_focal (from_logits: true)
+  # legacy contains BatchNorm: avoid training batches with only one sample.
+  head_type: legacy_v1
+  output_type: probs
+
+training:
+  batch_size: 4                    # Required: positive integer, per GPU/process.
+  epochs: 30                       # Required: positive integer.
+  learning_rate: 0.0001            # Required: positive learning rate for training.
+  optimizer: adam                  # Required: adam | adamw. SGD is not registered.
+  weight_decay: 0                  # Required: nonnegative number.
+  grad_accumulation_steps: 16      # Positive integer; default: 1.
+  # Effective batch size for a full accumulation window:
+  # batch_size * grad_accumulation_steps * number of GPU processes.
+  # There is no optimizer_params mapping; betas/eps/etc. are not wired to YAML.
+
+  loss_fn: binary_focal            # Required: bce | bce_with_logits | binary_focal.
+  loss_params:                     # Optional mapping; default: {}.
+    # The mapping is passed directly to the selected loss constructor.
+    # These four fields apply to binary_focal:
+    alpha: 0.65                    # [0, 1] or null; default: 0.25.
+    # alpha weights class 1 (fraud); 1-alpha weights class 0 (genuine).
+    # null disables class weighting.
+    gamma: 3.0                     # >= 0; default: 2.0. Zero removes focal modulation.
+    from_logits: false             # true | false; default: false. Must match the head.
+    reduction: mean                # mean | sum for training; default: mean.
+    # The loss also accepts none, but the trainer requires a scalar loss,
+    # so reduction: none is not usable with ordinary multi-sample batches.
+    # With bce / bce_with_logits, remove alpha, gamma, and from_logits.
+    # Use loss_params: {} or {reduction: mean}; reduction: sum also works.
+    # PyTorch's tensor-valued weight / pos_weight arguments are not converted
+    # from YAML lists to tensors by this project. Legacy size_average / reduce
+    # constructor flags are passed through but are best left unset.
+
+  training_threshold: 0.5          # Probability threshold [0, 1]; default: 0.5.
+  # Despite its name, this changes the POST-TRAINING leaderboard threshold.
+  # Training/validation metrics always use probability > 0.5.
+
+scheduler:                        # Required section; use {} for no warmup/decay.
+  warmup_epochs: 0                 # Nonnegative integer; default: 0 (disabled).
+  decay_type: plateau              # step | cosine | plateau | null; default: null.
+  # null disables decay; warmup can still run. Unknown strings currently also
+  # fall through to no decay, so use only the documented choices.
+
+  # Used only with decay_type: step:
+  step_size: 10                    # Required for step; positive integer interval.
+  # A nonpositive step_size disables the step scheduler.
+  gamma: 0.1                       # Step LR multiplier; default: 0.1.
+
+  # Used only with decay_type: cosine:
+  eta_min: 1.0e-7                  # Nonnegative minimum LR; default: 1.0e-7.
+  # Period is max(1, training.epochs - warmup_epochs); no T_max YAML option.
+
+  # Used only with decay_type: plateau (monitors validation loss):
+  patience: 5                      # Nonnegative integer; default: 10.
+  factor: 0.5                      # Reduction factor, normally 0 < factor < 1; default: 0.1.
+  min_lr: 1.0e-7                   # Nonnegative LR floor; default: 1.0e-6.
+  min_delta: 0.0001                # Relative improvement threshold; default: 1.0e-4.
+  # mode='min' and relative threshold mode are fixed by scheduler construction.
+
+early_stopping:                   # Optional section; omitted means disabled.
+  enabled: true                    # true | false; default: false.
+  patience: 12                     # Required if enabled: positive integer.
+  delta: 1.0e-7                    # Required if enabled: nonnegative absolute improvement.
+  verbose: true                    # Required if enabled: true | false.
+  # Monitors validation loss. Unlike scheduler.min_delta, delta is absolute.
+
+checkpoint:                       # Optional section; omitted means disabled.
+  enabled: true                    # true | false; default: false.
+  # Saves every epoch as checkpoints/epoch_<number>.pt (number starts at 1).
+  # Keep enabled for the normal end-to-end entry point: post-training evaluation
+  # looks for these checkpoints. There are no save_best_only/resume YAML options.
+
+dataloader:
+  num_workers: 4                   # Required: nonnegative integer, per process.
+  prefetch_factor: 2               # Required: positive integer with workers > 0.
+  persistent_workers: true         # Required: true | false; requires workers > 0 if true.
+  # For num_workers: 0, use prefetch_factor: null and persistent_workers: false.
+  pin_memory: true                 # Required: true | false.
+  non_blocking: true               # Required by post-training evaluation: true | false.
+  # non_blocking is not forwarded from this YAML to the training loop;
+  # training and validation use their own function defaults (true).
+  drop_last: true                  # Required: true | false; affects training loader only.
+  # Validation always keeps its last batch. Keep enough training data to yield
+  # at least one batch per process after dropping an incomplete final batch.
+
+data:
+  train_csv: /path/to/train.csv     # Required: prebuilt CSV with path and label columns.
+  eval_csv: /path/to/eval.csv       # Required: path, label, batch_name for the full pipeline.
+  # path points to readable images; label: 0 = genuine, 1 = fraud.
+  # batch_name is used by the post-training leaderboard for grouping.
+  train_val_split: 0.9             # Required: training fraction, strictly between 0 and 1.
+  # Split is stratified by label with random_state=42, fixed in code.
+  # Training reads the prebuilt CSV directly; it does not call preprocess_csv.
+  image_type: ori                  # Optional metadata convention: ori | crop.
+  # image_type is NOT consumed by the current training/evaluation entry points.
+  # Select original/cropped images through the CSV's path column instead.
+
+transform:
+  version: v1                      # v1 | v2 | v3; default: v1.
+  # v1: resize directly to a square (may distort aspect ratio).
+  # v2: center-crop portrait images to a square; resize/pad other aspect ratios.
+  # v3: preserve aspect ratio, resize to fit, and zero-pad to a square.
+  image_size: 1024                 # Required: positive integer; backbone must support it.
+  # The registry does not enumerate allowed resolutions. ViT backbones may
+  # impose patch-size constraints; use a resolution compatible with your model.
+  normalize_mean: [0.485, 0.456, 0.406]  # Required: three RGB means.
+  normalize_std: [0.229, 0.224, 0.225]   # Required: three positive RGB standard deviations.
+  # Images are converted to RGB, then float32 in [0, 1], before normalization.
+  # These are example ImageNet statistics, not automatic defaults.
+
+# Generated metadata: do not configure run_dir, git_commit_hash, or timing here.
+# run_dir is derived as experiment.save_dir/experiment.save_name.
+# git_commit_hash and timing are added when run artifacts are saved.
+#
+# External model dependencies (environment variables, NOT training YAML keys):
+#   DINOV3_REPO_DIR     default: /mnt3/repo_and_weights/repo/dinov3
+#   VAN_REPO_DIR        default: /mnt3/repo_and_weights/repo/VAN-Classification
+#   UNIREPLKNET_REPO_DIR default: /mnt3/repo_and_weights/repo/UniRepLKNet
+# Pretrained weight paths are fixed in src/models/backbones/{dino,van,unireplknet}.py
+# under /mnt3/repo_and_weights/weights/{dinov3,van,unireplknet}.
+# Training always uses pretrained backbone loading; there is no model.pretrained
+# YAML option wired into src/train.py. Inference can disable that load in Python.
+# CUDA_VISIBLE_DEVICES selects visible GPUs; torchrun supplies LOCAL_RANK and DDP
+# settings. Neither CUDA device nor process count is read from this training YAML.
+#
+# The separate src/inference service has its own registry and environment settings;
+# backend/device/threshold service options do not belong in this training YAML.
