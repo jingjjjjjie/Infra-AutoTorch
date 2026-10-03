@@ -1,13 +1,14 @@
+import os
 import sys
 import timm
 import torch
 import torch.nn as nn
 
-REPO_DIR = '/mnt3/repo_and_weights/repo/UniRepLKNet'
+REPO_DIR = os.environ.get('UNIREPLKNET_REPO_DIR', '/mnt3/repo_and_weights/repo/UniRepLKNet')
 WEIGHTS_DIR = '/mnt3/repo_and_weights/weights/unireplknet'
 
 sys.path.insert(0, REPO_DIR)
-from unireplknet import *
+
 
 # more variants to be implemented, refer to https://github.com/AILab-CVC/UniRepLKNet?tab=readme-ov-file
 # the link to some weights are broken, refer to https://huggingface.co/DingXiaoH/UniRepLKNet/tree/main for downloads
@@ -23,7 +24,7 @@ WEIGHTS_MAP = {
 
 }
 
-OUTPUT_DIM = { 
+OUTPUT_DIM = {
     # ImageNet-1K Pretrained Weights
     "unireplknet_p":  512,
     "unireplknet_n":  640,
@@ -34,7 +35,7 @@ OUTPUT_DIM = {
     "unireplknet_b_in22k": 1024
 }
 
-def load_unireplknet_model(model_name: str) -> tuple[nn.Module, int]:
+def load_unireplknet_model(model_name: str, pretrained: bool = True) -> tuple[nn.Module, int]:
     """Load a UniRepLKNet model with pretrained weights.
 
     Returns:
@@ -43,15 +44,19 @@ def load_unireplknet_model(model_name: str) -> tuple[nn.Module, int]:
     if model_name not in WEIGHTS_MAP:
         raise ValueError(f"Unknown UniRepLKNet model: {model_name}. Available: {list(WEIGHTS_MAP.keys())}")
 
+    import importlib
+    importlib.import_module("unireplknet")  # Register the external timm architectures.
+
     arch_name = model_name.replace("_in22k", "")
     model = timm.create_model(arch_name, num_classes=1000)
 
-    weights_path = WEIGHTS_MAP[model_name]
-    checkpoint = torch.load(weights_path, weights_only=False)
-    state_dict = checkpoint.get("state_dict", checkpoint)
-    # Remove head weights to avoid size mismatch (we replace head with Identity anyway)
-    state_dict = {k: v for k, v in state_dict.items() if not k.startswith("head.")}
-    model.load_state_dict(state_dict, strict=False)
+    if pretrained:
+        weights_path = WEIGHTS_MAP[model_name]
+        checkpoint = torch.load(weights_path, weights_only=False)
+        state_dict = checkpoint.get("state_dict", checkpoint)
+        # Remove head weights to avoid size mismatch (we replace head with Identity anyway)
+        state_dict = {k: v for k, v in state_dict.items() if not k.startswith("head.")}
+        model.load_state_dict(state_dict, strict=False)
 
     model.head = nn.Identity()
 

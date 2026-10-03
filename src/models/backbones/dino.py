@@ -1,8 +1,9 @@
+import os
 import sys
 import torch
 import torch.nn as nn
 
-REPO_DIR = '/mnt3/repo_and_weights/repo/dinov3'
+REPO_DIR = os.environ.get('DINOV3_REPO_DIR', '/mnt3/repo_and_weights/repo/dinov3')
 WEIGHTS_DIR = '/mnt3/repo_and_weights/weights/dinov3'
 
 sys.path.insert(0, REPO_DIR)
@@ -38,7 +39,7 @@ OUTPUT_DIM = {
 }
 
 
-def load_dino_model(model_name: str) -> tuple[nn.Module, int]:
+def load_dino_model(model_name: str, pretrained: bool = True) -> tuple[nn.Module, int]:
     """Load a DiNOv3 model with pretrained weights.
     Returns:
         (model, output_dim) tuple
@@ -49,7 +50,8 @@ def load_dino_model(model_name: str) -> tuple[nn.Module, int]:
     model = torch.hub.load(REPO_DIR, model_name, source='local', pretrained=False)
 
     # Load weights from local file
-    state_dict = torch.load(weights_path)
-    model.load_state_dict(state_dict)
+    if pretrained:
+        state_dict = torch.load(weights_path)
+        model.load_state_dict(state_dict)
 
     return model, OUTPUT_DIM[model_name]

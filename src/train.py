@@ -56,7 +56,10 @@ def main():
     ddp_model = wrap_model_ddp(model, local_rank)
 
     # Build loss function, optimizer, and learning rate scheduler
-    loss_fn = build_loss_fn(cfg.training.loss_fn)
+    loss_fn = build_loss_fn(
+        cfg.training.loss_fn,
+        **dict(cfg.training.get('loss_params', {})),
+    )
     optimizer = build_optimizer(name=cfg.training.optimizer, model=ddp_model, lr=cfg.training.learning_rate, weight_decay=cfg.training.weight_decay)
     scheduler = build_lr_scheduler(cfg, optimizer)
 

@@ -13,7 +13,7 @@ BACKBONE_LOADERS = {
 }
 
 # 
-def load_backbone(model_name: str) -> tuple:
+def load_backbone(model_name: str, pretrained: bool = True) -> tuple:
     """Load a backbone model by name, raises ValueError: If model_name is not recognized.
     Args:
         model_name: Specific name of the model (e.g., 'dinov3_vitb16', 'van_small')
@@ -25,6 +25,6 @@ def load_backbone(model_name: str) -> tuple:
         raise ValueError(f"Unknown model: '{model_name}'. Available: {available}")
 
     loader = BACKBONE_LOADERS[model_name]
-    return loader(model_name)
+    return loader(model_name, pretrained=pretrained)
 
 

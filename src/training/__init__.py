@@ -1,15 +1,15 @@
 '''
 Training components: loss, optimizers, callbacks, and trainers.
 '''
-from .loss import LOSS_FN_MAP
+from .loss import BinaryFocalLoss, LOSS_FN_MAP
 from .optimizers import OPTIMIZER_MAP
 from .lr_scheduler import LRScheduler
 
-def build_loss_fn(name: str):
-    """Create loss function. Supported: cross_entropy, bce, bce_with_logits, mse"""
+def build_loss_fn(name: str, **kwargs):
+    """Create a loss function from the registry."""
     if name not in LOSS_FN_MAP:
         raise ValueError(f"Unknown loss function '{name}'. Available: {list(LOSS_FN_MAP.keys())}")
-    return LOSS_FN_MAP[name]()
+    return LOSS_FN_MAP[name](**kwargs)
 
 
 def build_optimizer(name: str, model, lr: float, weight_decay: float):

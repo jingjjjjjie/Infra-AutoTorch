@@ -1,4 +1,8 @@
 # other files
+# Keep experiment configurations local; publish only the annotated example.
+/configs/*
+!/configs/train_config.example.yaml
+
 notes.txt
 **/idfraud/annotation/
 dinov3/

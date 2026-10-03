@@ -15,7 +15,8 @@ TASK_TO_ARCHITECTURE_MAP = {
 def build_model(model_name: str, device, 
                 task: str = 'classification',
                 head_type: str = 'v1', 
-                freeze_backbone: bool = False):
+                freeze_backbone: bool = False,
+                pretrained: bool = True):
     """
     Builds a complete model(architecture) from backbone + head for a given task.
     Args:
@@ -31,7 +32,7 @@ def build_model(model_name: str, device,
     if task not in TASK_TO_ARCHITECTURE_MAP:
         raise ValueError(f"Unknown task: '{task}'. Available: {list(TASK_TO_ARCHITECTURE_MAP.keys())}")
     # load backbone from model name
-    backbone, output_dim = load_backbone(model_name=model_name)
+    backbone, output_dim = load_backbone(model_name=model_name, pretrained=pretrained)
     # build head from task and head type
     head = build_head(task, head_type, output_dim)
 

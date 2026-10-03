@@ -170,6 +170,3 @@ transform:
 # YAML option wired into src/train.py. Inference can disable that load in Python.
 # CUDA_VISIBLE_DEVICES selects visible GPUs; torchrun supplies LOCAL_RANK and DDP
 # settings. Neither CUDA device nor process count is read from this training YAML.
-#
-# The separate src/inference service has its own registry and environment settings;
-# backend/device/threshold service options do not belong in this training YAML.
